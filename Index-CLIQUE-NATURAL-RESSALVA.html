@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SESI Ananindeua - Controle 2026 vs 2027 NUVEM</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/dist/umd/supabase.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>body{font-family:'Inter',sans-serif;background:#f5f7fb}</style>
+</head>
+<body class="min-h-screen">
+<div class="max-w-[1320px] mx-auto px-4 md:px-6 py-6 md:py-8">
+
+<header class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+<div>
+<h1 class="text-[26px] md:text-[32px] font-extrabold tracking-tight text-[#0f172a] leading-none">SESI Ananindeua</h1>
+<p class="mt-1 text-[11px] font-bold tracking-[0.18em] text-slate-500 uppercase">Controle de Vagas 2026 vs 2027 - NUVEM</p>
+<div class="mt-3 flex flex-wrap items-center gap-2">
+<span id="cloudStatus" class="px-3 py-1 rounded-full bg-yellow-100 text-yellow-800 text-[11px] font-bold">☁️ 42 turmas local (1141 vagas)</span>
+<button id="btnCopyLink" class="h-8 px-4 rounded-full bg-[#003366] text-white text-[12px] font-bold">🔗 Copiar link</button>
+<button id="btnForcePush" class="h-9 px-5 rounded-full bg-emerald-600 text-white text-[13px] font-bold animate-pulse">🚀 Enviar 1141 pra Nuvem</button>
+</div>
+</div>
+<div class="flex flex-wrap gap-2">
+<button id="btnExport" class="h-10 px-5 rounded-full bg-white border border-slate-200 text-[13px] font-semibold">Exportar</button>
+<button id="btnImport" class="h-10 px-5 rounded-full bg-white border border-slate-200 text-[13px] font-semibold">Importar</button>
+<button id="btnCSV" class="h-10 px-5 rounded-full bg-white border border-slate-200 text-[13px] font-semibold">CSV</button>
+<button id="btnClear" class="h-10 px-5 rounded-full bg-white border border-red-200 text-red-600 text-[13px] font-semibold">Limpar Nuvem</button>
+<button id="btnNovaTurma" class="h-10 px-6 rounded-full bg-[#003366] text-white text-[13px] font-semibold">+ Nova Turma</button>
+</div>
+</header>
+
+<div class="mt-6 flex gap-2">
+  <button id="tab-turmas" onclick="switchTab('turmas')" class="px-6 py-2.5 rounded-full font-bold bg-[#003366] text-white shadow text-[13px]">📚 TURMAS</button>
+  <button id="tab-ressalvas" onclick="switchTab('ressalvas')" class="px-6 py-2.5 rounded-full font-bold bg-white text-[#003366] border-2 border-[#003366] text-[13px]">📋 RESSALVAS <span id="badge-ressalvas" class="ml-1 bg-red-500 text-white text-[11px] px-2 py-0.5 rounded-full hidden">0</span></button>
+</div>
+
+<div id="aba-turmas">
+
+
+<div id="infoBar" class="mt-6 rounded-[16px] bg-blue-50 border border-blue-200 px-4 py-3">
+<div id="statusDetalhe" class="text-[13px] text-blue-800">💡 Nuvem ativa: Copie o link e mande no grupo. Quando alguém editar, atualiza pra todos ao vivo!</div>
+<pre id="errorBox" class="mt-3 hidden text-[11px] bg-white p-3 rounded-xl border whitespace-pre-wrap max-h-[200px] overflow-auto"></pre>
+</div>
+
+<div class="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+  <div class="rounded-[20px] bg-[#eef4ff] border border-[#d6e4ff] p-5"><p class="text-[11px] font-bold tracking-[0.12em] text-[#3b82f6]">TOTAL DE VAGAS 2027</p><p id="totalVagas" class="mt-3 text-[36px] font-bold text-[#0f172a]">1141</p><p id="totalTurnos" class="mt-2 text-[12px] text-[#64748b]">604 mat + 537 vesp</p></div>
+  <div class="rounded-[20px] bg-[#e6f6ef] border border-[#b7e5cd] p-5"><p class="text-[11px] font-bold tracking-[0.12em] text-[#00A859]">MATRICULADOS</p><p id="totalMatriculados" class="mt-3 text-[36px] font-bold text-[#0f172a]">1002</p><p id="percOcupacao" class="mt-2 text-[12px] text-[#4a7a61]">87.8% ocupação</p></div>
+  <div id="cardVagasDisp" class="rounded-[20px] border p-5 text-white bg-[#00A859] border-[#00914d]"><p class="text-[11px] font-bold tracking-[0.12em] text-white/80">VAGAS DISPONÍVEIS</p><p id="vagasDisp" class="mt-3 text-[36px] font-bold">139</p><p id="vagasDispDetalhe" class="mt-2 text-[12px] text-white/80">139 restantes</p></div>
+  <div class="rounded-[20px] bg-[#1e3a5f] border border-[#2a4a73] p-5 text-white"><p class="text-[11px] font-bold tracking-[0.12em] text-white/60">META</p><p id="metaPerc" class="mt-3 text-[42px] font-extrabold text-center">95.1%</p><div class="mt-4 rounded-[12px] bg-white/10 border border-white/10 p-2.5 flex items-center gap-2"><span class="text-[11px] font-bold text-white/70">META:</span><input id="inputMetaValor" type="number" value="1054" class="w-[86px] h-8 px-2.5 rounded-full bg-white text-[#1e3a5f] text-[13px] font-bold"><select id="selectMetaTipo" class="h-8 px-2.5 rounded-full bg-white/15 border border-white/20 text-[11px] text-white"><option value="alunos" class="text-black">alunos</option><option value="%" class="text-black">%</option></select></div><p id="metaAtingido" class="mt-2 text-[11px] text-white/70">Atingido: 1002 | Faltam 52</p></div>
+</div>
+
+<div class="mt-6 rounded-[16px] bg-white border border-slate-200 p-4">
+<div class="flex flex-col lg:flex-row gap-4 lg:items-center justify-between">
+<div class="flex flex-wrap items-center gap-4">
+<div class="flex items-center gap-2"><span class="text-[11px] font-bold text-slate-500">TURNO:</span><div class="flex gap-1" id="filtroTurno"><button data-turno="Todos" class="pill px-3.5 py-1.5 rounded-full border text-[12px] font-semibold bg-[#003366] text-white">Todos</button><button data-turno="Matutino" class="pill px-3.5 py-1.5 rounded-full border text-[12px] font-semibold bg-white">Matutino</button><button data-turno="Vespertino" class="pill px-3.5 py-1.5 rounded-full border text-[12px] font-semibold bg-white">Vespertino</button></div></div>
+<div class="flex items-center gap-2"><span class="text-[11px] font-bold text-slate-500">SEGMENTO:</span><div class="flex gap-1 flex-wrap" id="filtroSegmento"><button data-seg="Todos" class="pill px-3.5 py-1.5 rounded-full border text-[12px] font-semibold bg-[#003366] text-white">Todos</button><button data-seg="Fundamental I" class="pill px-3.5 py-1.5 rounded-full border text-[12px] font-semibold bg-white">Fund I</button><button data-seg="Fundamental II" class="pill px-3.5 py-1.5 rounded-full border text-[12px] font-semibold bg-white">Fund II</button><button data-seg="Ensino Médio" class="pill px-3.5 py-1.5 rounded-full border text-[12px] font-semibold bg-white">Médio</button><button data-seg="Educação Infantil" class="pill px-3.5 py-1.5 rounded-full border text-[12px] font-semibold bg-white">Ed. Infantil</button></div></div>
+</div>
+<input id="busca" type="text" placeholder="🔍 Buscar" class="h-10 px-4 rounded-full border border-slate-200 text-[13px] w-full lg:w-64">
+</div>
+</div>
+
+<div class="mt-4 flex items-center gap-2 flex-wrap" id="abasAnos"><button data-ano="2027" class="aba px-5 py-2 rounded-full text-[13px] font-bold bg-[#003366] text-white">2027 - Controle Atual</button><button data-ano="2026" class="aba px-5 py-2 rounded-full text-[13px] font-bold bg-white border">2026 - Base</button><button data-ano="comparativo" class="aba px-5 py-2 rounded-full text-[13px] font-bold bg-white border">Comparativo</button></div>
+<div id="gridTurmas" class="mt-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+
+</div>
+
+<div id="aba-ressalvas" class="hidden">
+  <div class="mt-6 bg-white rounded-[20px] shadow border border-slate-200 p-6">
+    <h2 class="text-[18px] font-black text-[#003366]">➕ NOVA RESSALVA - Aluno Saindo</h2>
+    <p class="text-[12px] text-slate-500 mt-1">Ao confirmar, baixa 1 matriculado e abre 1 vaga automaticamente</p>
+    <div class="grid md:grid-cols-2 gap-4 mt-5">
+      <div class="md:col-span-2"><label class="text-[11px] font-bold tracking-widest text-slate-500 uppercase">Nome do Aluno *</label><input id="res-nome" type="text" placeholder="Ex: João Silva Santos" class="mt-1.5 w-full px-4 py-2.5 border border-slate-200 rounded-xl text-[13px] outline-none focus:border-[#003366]"></div>
+      <div><label class="text-[11px] font-bold tracking-widest text-slate-500 uppercase">Turma *</label><select id="res-turma" onchange="document.getElementById('res-serie').value=this.options[this.selectedIndex].dataset.serie||''" class="mt-1.5 w-full px-4 py-2.5 border border-slate-200 rounded-xl text-[13px] outline-none focus:border-[#003366]"><option value="">Selecione a turma</option></select></div>
+      <div><label class="text-[11px] font-bold tracking-widest text-slate-500 uppercase">Série</label><input id="res-serie" type="text" readonly class="mt-1.5 w-full px-4 py-2.5 border rounded-xl text-[13px] bg-slate-50"></div>
+      <div><label class="text-[11px] font-bold tracking-widest text-slate-500 uppercase">Documento Entregue? *</label><div class="flex gap-3 mt-1.5"><label class="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 border-2 rounded-xl cursor-pointer has-[:checked]:border-green-500 has-[:checked]:bg-green-50"><input type="radio" name="res-doc" value="SIM"> <span class="font-bold text-[13px] text-green-700">✅ SIM</span></label><label class="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 border-2 rounded-xl cursor-pointer has-[:checked]:border-red-500 has-[:checked]:bg-red-50"><input type="radio" name="res-doc" value="NAO"> <span class="font-bold text-[13px] text-red-700">❌ NÃO</span></label></div></div>
+      <div><label class="text-[11px] font-bold tracking-widest text-slate-500 uppercase">Data da Solicitação *</label><input id="res-data" type="date" class="mt-1.5 w-full px-4 py-2.5 border rounded-xl text-[13px] outline-none"></div>
+    </div>
+    <button onclick="confirmarRessalva()" class="mt-6 px-8 py-3 bg-[#003366] hover:bg-[#002244] text-white font-bold rounded-xl text-[13px] shadow">✅ CONFIRMAR RESSALVA E ABRIR VAGA</button>
+  </div>
+  <div class="mt-6 bg-white rounded-[20px] shadow border border-slate-200 p-6"><h3 class="text-[15px] font-black text-[#003366]">📋 Lista de Ressalvas (<span id="count-ressalvas">0</span>)</h3><div class="overflow-x-auto mt-4"><table class="w-full text-[13px]"><thead><tr class="bg-[#003366] text-white"><th class="px-3 py-2.5 text-left rounded-tl-xl">Nome</th><th class="px-3 py-2.5 text-left">Turma / Série</th><th class="px-3 py-2.5 text-center">Doc</th><th class="px-3 py-2.5 text-center">Data</th><th class="px-3 py-2.5 text-center rounded-tr-xl">Ação</th></tr></thead><tbody id="lista-ressalvas"><tr><td colspan="5" class="py-8 text-center text-slate-400">Nenhuma ressalva</td></tr></tbody></table></div></div>
+</div>
+
+<div id="modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4"><div class="bg-white rounded-[20px] p-6 w-full max-w-md"><h3 class="font-bold mb-4">Nova / Editar Turma</h3><input id="mNome" placeholder="Nome ex: 1A - MANHA" class="w-full border rounded-xl px-3 py-2.5 mb-3 text-[13px]"><div class="grid grid-cols-2 gap-3 mb-3"><select id="mTurno" class="border rounded-xl px-3 py-2.5 text-[13px]"><option>Matutino</option><option>Vespertino</option></select><select id="mSegmento" class="border rounded-xl px-3 py-2.5 text-[13px]"><option>Fundamental I</option><option>Fundamental II</option><option>Ensino Médio</option><option>Educação Infantil</option></select></div><div class="grid grid-cols-2 gap-3 mb-3"><input id="mSerie" placeholder="Série ex: 1º ano" class="border rounded-xl px-3 py-2.5 text-[13px]"><input id="mVagas2027" type="number" placeholder="Vagas 2027" class="border rounded-xl px-3 py-2.5 text-[13px]"></div><div class="grid grid-cols-2 gap-3 mb-5"><input id="mAlunos2026" type="number" placeholder="Alunos 2026" class="border rounded-xl px-3 py-2.5 text-[13px]"><input id="mMatriculados" type="number" placeholder="Matriculados 2027" class="border rounded-xl px-3 py-2.5 text-[13px]"></div><div class="flex gap-2 justify-end"><button id="mCancel" class="px-5 py-2.5 rounded-full border text-[13px]">Cancelar</button><button id="mSave" class="px-6 py-2.5 rounded-full bg-[#003366] text-white text-[13px] font-bold">Salvar na Nuvem</button></div></div></div>
+<input type="file" id="fileImport" accept=".json" class="hidden">
+</div>
+
+<script>
+const SUPABASE_URL = "https://oyuepjlkfnnpuhmuhbpv.supabase.co";
+const SUPABASE_KEY = "sb_publishable_a6qZ1d7ohc8t4pVX4h93Ng_PfHi5KQ1";
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let turmas = [];
+let filtroTurno = "Todos";
+let filtroSegmento = "Todos";
+let busca = "";
+let abaAno = "2027";
+let metaValor = 1054;
+let metaTipo = "alunos";
+let editingId = null;
+let pendingSaves = new Set();
+let lastLocalUpdate = {};
+
+
+function setStatus(msg, detail, color, errDetail){
+ document.getElementById('cloudStatus').textContent=msg;
+ document.getElementById('cloudStatus').className=`px-3 py-1 rounded-full text-[11px] font-bold ${color}`;
+ document.getElementById('statusDetalhe').textContent=detail;
+ const eb=document.getElementById('errorBox');
+ if(errDetail){ eb.textContent=errDetail; eb.classList.remove('hidden'); } else { eb.classList.add('hidden'); }
+}
+
+async function init(){
+ // Carrega local primeiro (bonito)
+ const local = localStorage.getItem('sesi_turmas_v3');
+ if(local){ try{ turmas=JSON.parse(local); }catch(e){} }
+ if(turmas.length===0){
+   // seed mínimo se não tiver nada
+   turmas=[{id:'t1',nome:'1EFT01ANA - 27.M (1A)',turno:'Matutino',segmento:'Fundamental I',serie:'1º ano',alunos2026:0,vagas2027:25,matriculados2027:0}];
+ }
+ setStatus(`📦 ${turmas.length} turmas local (${turmas.reduce((s,t)=>s+t.vagas2027,0)} vagas)`,`Local: ${turmas.length} turmas. Clique em 🚀 pra enviar pra nuvem. Se der erro, o motivo vai aparecer abaixo.`, 'bg-yellow-100 text-yellow-800');
+ render();
+
+ // Tenta nuvem em background
+ try{
+   const {data, error} = await supabaseClient.from('turmas').select('*');
+   if(error) throw error;
+   if(data && data.length>0){
+     turmas=data.map(r=>({id:r.id, nome:r.nome, turno:r.turno, segmento:r.segmento, serie:r.serie||'', alunos2026:r.vagas_2026||0, vagas2027:r.vagas_2027||0, matriculados2027:r.matriculados||0}));
+     setStatus(`☁️ Salvo na nuvem - ao vivo (${turmas.length} turmas)`,`Nuvem OK! ${turmas.length} turmas. Total ${turmas.reduce((s,t)=>s+t.vagas2027,0)} vagas.`, 'bg-green-100 text-green-800');
+     render();
+   }
+ }catch(err){
+   setStatus(`❌ Erro nuvem: ${err.message}`,`Erro ao ler nuvem: ${err.message}. Suas ${turmas.length} turmas estão salvas local. Clique em 🚀 - se falhar, copie o erro abaixo e me mande print.`, 'bg-red-100 text-red-800', `ERRO COMPLETO:\n${err.message}\n\nDetalhe:\n${JSON.stringify(err,null,2)}\n\nSOLUÇÃO: Rode no Supabase SQL Editor:\nalter table public.turmas disable row level security;\ngrant all on public.turmas to anon, authenticated, public;`);
+ }
+   // Liga realtime
+  try{
+    supabaseClient.channel('turmas_realtime').on('postgres_changes',{event:'*',schema:'public',table:'turmas'},(payload)=>{
+      console.log('Mudança na nuvem detectada!', payload);
+      loadCloud();
+    }).subscribe((status)=>{
+      console.log('Realtime status:', status);
+      if(status==='SUBSCRIBED'){ setStatus(`☁️ Ao vivo (${turmas.length} turmas) - Sincronizando`, `Conectado ao vivo! Se alguém mudar em outro PC, atualiza aqui em 1-2 segundos!`, 'bg-green-100 text-green-800'); }
+    });
+  }catch(e){ console.log('realtime error', e); }
+  // Fallback: atualiza a cada 3 segundos se realtime falhar
+  setInterval(()=>{ loadCloud(); }, 3000);
+}
+
+async function loadCloud(){
+ try{
+  const {data}=await supabaseClient.from('turmas').select('*');
+  if(data && data.length>0){ 
+    // Não sobrescreve turmas que foram editadas nos últimos 2 segundos (evita travada)
+    const agora = Date.now();
+    const cloudMap = new Map(data.map(r=>[r.id, r]));
+    // Atualiza só turmas que NÃO estão com save pendente e não foram editadas recentemente
+    const novasTurmas = turmas.map(localT => {
+      if(pendingSaves.has(localT.id)) return localT; // está salvando agora, não sobrescreve
+      if(lastLocalUpdate[localT.id] && (agora - lastLocalUpdate[localT.id] < 2000)) return localT; // editado há menos de 2s
+      const cloudR = cloudMap.get(localT.id);
+      if(cloudR){
+        return {id:cloudR.id,nome:cloudR.nome,turno:cloudR.turno,segmento:cloudR.segmento,serie:cloudR.serie||'',alunos2026:cloudR.vagas_2026||0,vagas2027:cloudR.vagas_2027||0,matriculados2027:cloudR.matriculados||0};
+      }
+      return localT;
+    });
+    // Adiciona turmas novas que só existem na nuvem
+    for(const r of data){
+      if(!turmas.find(t=>t.id===r.id) && !pendingSaves.has(r.id)){
+        novasTurmas.push({id:r.id,nome:r.nome,turno:r.turno,segmento:r.segmento,serie:r.serie||'',alunos2026:r.vagas_2026||0,vagas2027:r.vagas_2027||0,matriculados2027:r.matriculados||0});
+      }
+    }
+    // Só renderiza se algo mudou de verdade
+    const mudou = JSON.stringify(novasTurmas.map(t=>t.id+':'+t.matriculados2027).sort()) !== JSON.stringify(turmas.map(t=>t.id+':'+t.matriculados2027).sort());
+    if(mudou || novasTurmas.length !== turmas.length){
+      turmas = novasTurmas;
+      render(); 
+    }
+  }
+ }catch(e){ console.log('loadCloud error', e); }
+}
+
+function getFiltered(){
+ return [...turmas].sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR',{numeric:true})).filter(t=>{
+  if(filtroTurno!=='Todos' && t.turno!==filtroTurno) return false;
+  if(filtroSegmento!=='Todos' && t.segmento!==filtroSegmento) return false;
+  if(busca && !t.nome.toLowerCase().includes(busca.toLowerCase())) return false;
+  return true;
+ });
+}
+function render(){
+ const filtered=getFiltered();
+ const totalVagas=filtered.reduce((s,t)=>s+t.vagas2027,0);
+ const totalMat=filtered.reduce((s,t)=>s+t.matriculados2027,0);
+ const vagasDisp=totalVagas-totalMat;
+ const vagasMat=filtered.filter(t=>t.turno==='Matutino').reduce((s,t)=>s+t.vagas2027,0);
+ const vagasVesp=filtered.filter(t=>t.turno==='Vespertino').reduce((s,t)=>s+t.vagas2027,0);
+ const percOcup=totalVagas?(totalMat/totalVagas*100).toFixed(1):0;
+ let metaPercVal=metaTipo==='alunos'?(metaValor?(totalMat/metaValor*100):0):(totalVagas?(totalMat/totalVagas*100):0);
+ document.getElementById('totalVagas').textContent=totalVagas;
+ document.getElementById('totalTurnos').textContent=`${vagasMat} matutino + ${vagasVesp} vespertino`;
+ document.getElementById('totalMatriculados').textContent=totalMat;
+ document.getElementById('percOcupacao').textContent=`${percOcup}% ocupação`;
+ document.getElementById('vagasDisp').textContent=vagasDisp;
+ document.getElementById('vagasDispDetalhe').textContent=vagasDisp<0?`faltam ${Math.abs(vagasDisp)}`:`${vagasDisp} restantes`;
+ document.getElementById('metaPerc').textContent=`${metaPercVal.toFixed(1)}%`;
+ document.getElementById('metaAtingido').textContent=`Atingido: ${totalMat} | Faltam ${Math.max(0,metaValor-totalMat)}`;
+ const grid=document.getElementById('gridTurmas');
+ if(abaAno==='comparativo'){
+   grid.innerHTML=`<div class="col-span-full bg-white rounded-[20px] p-5 border overflow-auto"><table class="w-full text-[13px]"><thead><tr class="text-[11px] text-slate-500 uppercase"><th class="text-left p-3">Turma</th><th class="p-3">2026</th><th class="p-3">2027 Vagas</th><th class="p-3">Matric.</th><th class="p-3">Dif.</th></tr></thead><tbody>${filtered.map(t=>`<tr class="border-t"><td class="p-3 font-semibold">${t.nome}</td><td class="p-3 text-center">${t.alunos2026}</td><td class="p-3 text-center">${t.vagas2027}</td><td class="p-3 text-center font-bold">${t.matriculados2027}</td><td class="p-3 text-center">${t.matriculados2027-t.alunos2026}</td></tr>`).join('')}</tbody></table></div>`;
+ } else {
+   grid.innerHTML=filtered.map(t=>{
+     const disp=t.vagas2027-t.matriculados2027;
+     const pct=t.vagas2027>0?(t.matriculados2027/t.vagas2027*100):0;
+     return `<div data-card-id="${t.id}" class="rounded-[22px] bg-white border border-slate-200 p-5 shadow-sm"><div class="flex justify-between gap-3"><h3 class="text-[15px] font-semibold text-[#0f172a]">${t.nome}</h3><div class="flex gap-1"><button onclick="editarTurma('${t.id}')" class="w-7 h-7 rounded-full border bg-white">✏️</button><button onclick="excluirTurma('${t.id}')" class="w-7 h-7 rounded-full border bg-white">🗑️</button></div></div><p class="mt-1 text-[12px] text-slate-500">${t.serie} • ${t.segmento} • ${t.turno}</p><div class="mt-4 space-y-2 text-[13px]"><div class="flex justify-between"><span>2026: ${t.alunos2026} alunos</span><span class="text-[11px] px-2 py-1 rounded-full bg-slate-100">${t.vagas2027-t.alunos2026>=0?'+':''}${t.vagas2027-t.alunos2026}</span></div><div class="flex justify-between"><span>2027: ${t.vagas2027} vagas</span><span data-disp class="text-[12px] font-semibold px-2.5 py-1 rounded-full ${disp<0?'bg-red-50 text-red-600 border border-red-200':disp===0?'bg-amber-100 text-amber-700 border border-amber-200':'bg-emerald-50 text-emerald-600 border border-emerald-100'}">${disp<0?`Superlotado ${disp}`:disp===0?'LOTADO':`Disp: ${disp}`}</span></div></div><div class="mt-4"><div class="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden"><div data-barra class="h-full ${disp<0?'bg-red-500':disp===0?'bg-amber-400':'bg-[#00A859]'}" style="width:${disp<0?100:Math.min(100,Math.max(0,pct))}%"></div></div><div class="mt-2 flex items-center justify-between"><span data-vagalivre class="text-[11px] text-slate-500">${disp} vagas livres</span><div class="flex items-center gap-2"><button onclick="alterarMat('${t.id}',-1)" class="w-8 h-8 rounded-full border bg-white font-bold active:scale-90 transition">-</button><span data-mat class="w-8 text-center font-bold">${t.matriculados2027}</span><button onclick="alterarMat('${t.id}',1)" class="w-8 h-8 rounded-full bg-[#003366] text-white font-bold active:scale-90 transition">+</button></div></div></div></div>`;
+   }).join('');
+ }
+ localStorage.setItem('sesi_turmas_v3',JSON.stringify(turmas));
+}
+
+async function alterarMat(id,delta){
+ const t=turmas.find(x=>x.id===id); if(!t) return;
+ const novoValor = Math.max(0,t.matriculados2027+delta);
+ if(novoValor===t.matriculados2027) return;
+ t.matriculados2027=novoValor;
+ lastLocalUpdate[id]=Date.now();
+ pendingSaves.add(id);
+ // Atualiza só o card clicado, sem recriar tudo - clique 100% natural
+ const cardEl = document.querySelector(`[data-card-id="${id}"]`);
+ if(cardEl){
+   const numEl = cardEl.querySelector('[data-mat]');
+   const dispEl = cardEl.querySelector('[data-disp]');
+   const barraEl = cardEl.querySelector('[data-barra]');
+   const vagaLivreEl = cardEl.querySelector('[data-vagalivre]');
+   const disp = t.vagas2027 - t.matriculados2027;
+   const pct = t.vagas2027>0 ? (t.matriculados2027/t.vagas2027*100) : 0;
+   if(numEl) numEl.textContent = t.matriculados2027;
+   if(dispEl){
+     if(disp<0){ dispEl.textContent=`Superlotado ${disp}`; dispEl.className='text-[12px] font-semibold px-2.5 py-1 rounded-full bg-red-50 text-red-600 border border-red-200'; }
+     else if(disp===0){ dispEl.textContent='LOTADO'; dispEl.className='text-[12px] font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200'; }
+     else { dispEl.textContent=`Disp: ${disp}`; dispEl.className='text-[12px] font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100'; }
+   }
+   if(barraEl){
+     barraEl.style.width = (disp<0?100:Math.min(100,Math.max(0,pct)))+'%';
+     barraEl.className='h-full '+(disp<0?'bg-red-500':disp===0?'bg-amber-400':'bg-[#00A859]');
+   }
+   if(vagaLivreEl) vagaLivreEl.textContent = disp+' vagas livres';
+ }
+ // Atualiza totais sem recriar grid
+ try{
+   const filtered=getFiltered();
+   const totalVagas=filtered.reduce((s,t)=>s+t.vagas2027,0);
+   const totalMat=filtered.reduce((s,t)=>s+t.matriculados2027,0);
+   const vagasDisp=totalVagas-totalMat;
+   const vagasMat=filtered.filter(t=>t.turno==='Matutino').reduce((s,t)=>s+t.vagas2027,0);
+   const vagasVesp=filtered.filter(t=>t.turno==='Vespertino').reduce((s,t)=>s+t.vagas2027,0);
+   const percOcup=totalVagas?(totalMat/totalVagas*100).toFixed(1):0;
+   let metaPercVal=metaTipo==='alunos'?(metaValor?(totalMat/metaValor*100):0):(totalVagas?(totalMat/totalVagas*100):0);
+   const elTv=document.getElementById('totalVagas'); if(elTv) elTv.textContent=totalVagas;
+   const elTt=document.getElementById('totalTurnos'); if(elTt) elTt.textContent=`${vagasMat} matutino + ${vagasVesp} vespertino`;
+   const elTm=document.getElementById('totalMatriculados'); if(elTm) elTm.textContent=totalMat;
+   const elPo=document.getElementById('percOcupacao'); if(elPo) elPo.textContent=`${percOcup}% ocupação`;
+   const elVd=document.getElementById('vagasDisp'); if(elVd) elVd.textContent=vagasDisp;
+   const elVdd=document.getElementById('vagasDispDetalhe'); if(elVdd) elVdd.textContent=vagasDisp<0?`faltam ${Math.abs(vagasDisp)}`:`${vagasDisp} restantes`;
+   const elMp=document.getElementById('metaPerc'); if(elMp) elMp.textContent=`${metaPercVal.toFixed(1)}%`;
+   const elMa=document.getElementById('metaAtingido'); if(elMa) elMa.textContent=`Atingido: ${totalMat} | Faltam ${Math.max(0,metaValor-totalMat)}`;
+   localStorage.setItem('sesi_turmas_v3',JSON.stringify(turmas));
+ }catch(e){}
+ // Manda pra nuvem sem travar o clique
+ supabaseClient.from('turmas').update({matriculados:t.matriculados2027}).eq('id',id).then(({error})=>{
+   if(error) setStatus('❌ Erro: '+error.message, error.message, 'bg-red-100 text-red-800', error.message);
+ }).catch(e=>{ setStatus('❌ Erro: '+e.message, e.message, 'bg-red-100 text-red-800', e.message); })
+ .finally(()=>{ setTimeout(()=>{ pendingSaves.delete(id); }, 400); });
+}
+function editarTurma(id){ const t=turmas.find(x=>x.id===id); if(!t) return; editingId=id; document.getElementById('mNome').value=t.nome; document.getElementById('mTurno').value=t.turno; document.getElementById('mSegmento').value=t.segmento; document.getElementById('mSerie').value=t.serie; document.getElementById('mVagas2027').value=t.vagas2027; document.getElementById('mAlunos2026').value=t.alunos2026; document.getElementById('mMatriculados').value=t.matriculados2027; document.getElementById('modal').classList.remove('hidden'); document.getElementById('modal').classList.add('flex'); }
+async function excluirTurma(id){ if(!confirm('Excluir da NUVEM?')) return; turmas=turmas.filter(t=>t.id!==id); render(); try{ await supabaseClient.from('turmas').delete().eq('id',id); }catch(e){ setStatus('Erro: '+e.message,e.message,'bg-red-100 text-red-800',e.message); } }
+document.getElementById('btnNovaTurma').onclick=()=>{ editingId=null; document.getElementById('mNome').value=''; document.getElementById('mVagas2027').value=25; document.getElementById('mAlunos2026').value=0; document.getElementById('mMatriculados').value=0; document.getElementById('mSerie').value=''; document.getElementById('modal').classList.remove('hidden'); document.getElementById('modal').classList.add('flex'); };
+document.getElementById('mCancel').onclick=()=>{document.getElementById('modal').classList.add('hidden');document.getElementById('modal').classList.remove('flex');};
+document.getElementById('mSave').onclick=async()=>{
+ const nome=document.getElementById('mNome').value.trim(); if(!nome) return alert('Digite nome');
+ const nova={id:editingId||'t'+Date.now(), nome, turno:document.getElementById('mTurno').value, segmento:document.getElementById('mSegmento').value, serie:document.getElementById('mSerie').value, vagas2027:parseInt(document.getElementById('mVagas2027').value)||0, alunos2026:parseInt(document.getElementById('mAlunos2026').value)||0, matriculados2027:parseInt(document.getElementById('mMatriculados').value)||0};
+ if(editingId){ turmas[turmas.findIndex(t=>t.id===editingId)]=nova; } else { turmas.push(nova); }
+ document.getElementById('modal').classList.add('hidden'); document.getElementById('modal').classList.remove('flex');
+ render();
+ try{ const {error}=await supabaseClient.from('turmas').upsert({id:nova.id, nome:nova.nome, turno:nova.turno, segmento:nova.segmento, serie:nova.serie, vagas_2026:nova.alunos2026, vagas_2027:nova.vagas2027, matriculados:nova.matriculados2027}); if(error) throw error; setStatus(`☁️ Salvo na nuvem (${turmas.length})`,'Salvo!','bg-green-100 text-green-800'); }catch(e){ setStatus('❌ Erro: '+e.message, e.message,'bg-red-100 text-red-800', e.message); }
+};
+
+document.getElementById('btnForcePush').onclick=async()=>{
+ if(!confirm(`Enviar ${turmas.length} turmas (${turmas.reduce((s,t)=>s+t.vagas2027,0)} vagas) pra NUVEM?`)) return;
+ let ok=0,erro=0,lastErr='';
+ setStatus(`🚀 Enviando ${turmas.length}...`,`Enviando... 0/${turmas.length}`,'bg-yellow-100 text-yellow-800');
+ for(const t of turmas){
+  try{
+   const {error}=await supabaseClient.from('turmas').upsert({id:t.id,nome:t.nome,turno:t.turno,segmento:t.segmento,serie:t.serie||'',vagas_2026:t.alunos2026||0,vagas_2027:t.vagas2027||0,matriculados:t.matriculados2027||0},{onConflict:'id'});
+   if(error) throw error; ok++;
+  }catch(e){ erro++; lastErr=`${e.message}\n${JSON.stringify(e,null,2)}`; }
+  setStatus(ok>0?`🚀 ${ok} ok, ${erro} erros de ${turmas.length}`:`❌ ${erro} erros`, `Enviando ${t.nome} - ${ok} sucesso, ${erro} falhas. ${erro>0?'Último erro abaixo:':''}`,'bg-yellow-100 text-yellow-800', erro>0?lastErr:'');
+  await new Promise(r=>setTimeout(r,80));
+ }
+ if(erro===0){ setStatus(`✅ ${ok} turmas enviadas pra nuvem!`,`${ok} sucesso! Total ${turmas.reduce((s,t)=>s+t.vagas2027,0)} vagas na nuvem! Dá F5 e testa no celular!`,'bg-green-100 text-green-800'); }
+ else { setStatus(`⚠️ ${ok} sucesso, ${erro} erros`,`${ok} ok, ${erro} erros. Copie o erro abaixo e me mande print!`,'bg-red-100 text-red-800', lastErr); }
+};
+
+document.getElementById('inputMetaValor').onchange=async(e)=>{ metaValor=parseInt(e.target.value)||0; render(); };
+document.getElementById('selectMetaTipo').onchange=async(e)=>{ metaTipo=e.target.value; render(); };
+document.getElementById('btnCopyLink').onclick=()=>{ navigator.clipboard.writeText(window.location.href); alert('Link copiado! Manda no grupo!'); };
+document.getElementById('btnExport').onclick=()=>{ const dataStr=JSON.stringify({turmas,meta:{valor:metaValor,tipo:metaTipo}},null,2); const blob=new Blob([dataStr],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`sesi_backup_${new Date().toISOString().slice(0,10)}.json`; a.click(); };
+document.getElementById('btnImport').onclick=()=>document.getElementById('fileImport').click();
+document.getElementById('fileImport').onchange=(e)=>{ const file=e.target.files[0]; if(!file) return; const reader=new FileReader(); reader.onload=async(ev)=>{ try{ const json=JSON.parse(ev.target.result); if(json.turmas){ turmas=json.turmas; for(const t of turmas){ await supabaseClient.from('turmas').upsert({id:t.id, nome:t.nome, turno:t.turno, segmento:t.segmento, serie:t.serie||'', vagas_2026:t.alunos2026||0, vagas_2027:t.vagas2027||0, matriculados:t.matriculados2027||0}); } render(); setStatus(`✅ ${turmas.length} importadas!`,'Importado!','bg-green-100 text-green-800'); } }catch(err){ setStatus('Erro import: '+err.message, err.message,'bg-red-100 text-red-800',err.message);} }; reader.readAsText(file); };
+document.getElementById('btnCSV').onclick=()=>{ const header="Nome,Turno,Segmento,Serie,Vagas2026,Vagas2027,Matriculados,Disponiveis\n"; const rows=turmas.map(t=>`"${t.nome}",${t.turno},${t.segmento},${t.serie},${t.alunos2026},${t.vagas2027},${t.matriculados2027},${t.vagas2027-t.matriculados2027}`).join("\n"); const blob=new Blob([header+rows],{type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='sesi_matriculas.csv'; a.click(); };
+document.getElementById('btnClear').onclick=async()=>{ if(!confirm('Limpar TODAS da NUVEM?')) return; try{ await supabaseClient.from('turmas').delete().neq('id','xxx'); turmas=[]; render(); setStatus('☁️ Nuvem limpa','Limpa','bg-green-100 text-green-800'); }catch(e){ setStatus('Erro: '+e.message,e.message,'bg-red-100 text-red-800',e.message); } };
+document.getElementById('busca').oninput=(e)=>{ busca=e.target.value; render(); };
+document.querySelectorAll('#filtroTurno button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#filtroTurno button').forEach(x=>{x.classList.remove('bg-[#003366]','text-white'); x.classList.add('bg-white');}); b.classList.add('bg-[#003366]','text-white'); b.classList.remove('bg-white'); filtroTurno=b.dataset.turno; render();});
+document.querySelectorAll('#filtroSegmento button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#filtroSegmento button').forEach(x=>{x.classList.remove('bg-[#003366]','text-white'); x.classList.add('bg-white');}); b.classList.add('bg-[#003366]','text-white'); b.classList.remove('bg-white'); filtroSegmento=b.dataset.seg; render();});
+document.querySelectorAll('#abasAnos button.aba').forEach(b=>b.onclick=()=>{document.querySelectorAll('#abasAnos button.aba').forEach(x=>{x.classList.remove('bg-[#003366]','text-white'); x.classList.add('bg-white','border');}); b.classList.add('bg-[#003366]','text-white'); b.classList.remove('bg-white','border'); abaAno=b.dataset.ano; render();});
+window.editarTurma=editarTurma; window.excluirTurma=excluirTurma; window.alterarMat=alterarMat;
+init();
+</script>
+
+<script>
+function switchTab(tab){
+  const aT=document.getElementById('aba-turmas'), aR=document.getElementById('aba-ressalvas');
+  if(aT) aT.classList.toggle('hidden', tab!=='turmas');
+  if(aR) aR.classList.toggle('hidden', tab!=='ressalvas');
+  const bT=document.getElementById('tab-turmas'), bR=document.getElementById('tab-ressalvas');
+  if(tab==='turmas'){ if(bT) bT.className='px-6 py-2.5 rounded-full font-bold bg-[#003366] text-white shadow text-[13px]'; if(bR) bR.className='px-6 py-2.5 rounded-full font-bold bg-white text-[#003366] border-2 border-[#003366] text-[13px]'; }
+  else { if(bR) bR.className='px-6 py-2.5 rounded-full font-bold bg-[#003366] text-white shadow text-[13px]'; if(bT) bT.className='px-6 py-2.5 rounded-full font-bold bg-white text-[#003366] border-2 border-[#003366] text-[13px]'; }
+}
+function popularSelectTurmas(){
+  const sel=document.getElementById('res-turma'); if(!sel||typeof turmas==='undefined') return;
+  const cur=sel.value; sel.innerHTML='<option value="">Selecione a turma</option>';
+  turmas.forEach(t=>{ const o=document.createElement('option'); o.value=t.id; o.textContent=t.nome+' - '+(t.serie||t.segmento)+' ('+t.turno+') - '+t.matriculados2027+'/'+t.vagas2027; o.dataset.serie=t.serie||t.segmento; sel.appendChild(o); });
+  if(cur) sel.value=cur;
+}
+let ressalvas=[];
+async function loadRessalvas(){
+  try{
+    const {data,error}=await supabaseClient.from('ressalvas').select('*').order('created_at',{ascending:false});
+    if(error) throw error; ressalvas=data||[];
+  }catch(e){ const loc=localStorage.getItem('sesi_ressalvas'); ressalvas=loc?JSON.parse(loc):[]; }
+  renderRessalvas();
+}
+function renderRessalvas(){
+  const tb=document.getElementById('lista-ressalvas'), ct=document.getElementById('count-ressalvas'), bd=document.getElementById('badge-ressalvas');
+  if(!tb) return;
+  if(ct) ct.textContent=ressalvas.length;
+  if(bd){ if(ressalvas.length>0){ bd.textContent=ressalvas.length; bd.classList.remove('hidden'); } else bd.classList.add('hidden'); }
+  if(ressalvas.length===0){ tb.innerHTML='<tr><td colspan="5" class="py-8 text-center text-slate-400">Nenhuma ressalva ainda</td></tr>'; return; }
+  tb.innerHTML=ressalvas.map(r=>{
+    const isSim=(r.documento_entregue==='SIM'||r.documento_entregue===true);
+    const badge=isSim?'<span class="bg-green-100 text-green-700 px-2.5 py-1 rounded-full text-[11px] font-bold">SIM</span>':'<span class="bg-red-100 text-red-700 px-2.5 py-1 rounded-full text-[11px] font-bold">NÃO</span>';
+    const df=r.data_solicitacao?new Date(r.data_solicitacao+'T00:00:00').toLocaleDateString('pt-BR'):'-';
+    return `<tr class="border-b border-slate-100 hover:bg-slate-50"><td class="px-3 py-3 font-bold">${r.nome_aluno||''}</td><td class="px-3 py-3">${r.turma_nome||r.turma_id||''} <span class="text-slate-400 text-[11px]">(${r.serie||''})</span></td><td class="px-3 py-3 text-center">${badge}</td><td class="px-3 py-3 text-center">${df}</td><td class="px-3 py-3 text-center"><button onclick="excluirRessalva('${r.id}')" class="text-red-400 hover:text-red-600">🗑️</button></td></tr>`;
+  }).join('');
+}
+async function confirmarRessalva(){
+  const nomeEl=document.getElementById('res-nome'), turmaSel=document.getElementById('res-turma'), serieEl=document.getElementById('res-serie'), docEl=document.querySelector('input[name="res-doc"]:checked'), dataEl=document.getElementById('res-data');
+  const nome=nomeEl?nomeEl.value.trim():''; const turmaId=turmaSel?turmaSel.value:''; const serie=serieEl?serieEl.value:''; const data=dataEl?dataEl.value:'';
+  if(!nome){ alert('Digite o nome do aluno'); return; }
+  if(!turmaId){ alert('Selecione a turma'); return; }
+  if(!docEl){ alert('Marque SIM ou NÃO'); return; }
+  if(!data){ alert('Selecione a data'); return; }
+  const turma=turmas.find(t=>t.id===turmaId); if(!turma){ alert('Turma não encontrada'); return; }
+  if(turma.matriculados2027<=0){ alert('Turma já está com 0'); return; }
+  if(!confirm(`Confirmar ressalva de ${nome} na ${turma.nome}? Vai baixar de ${turma.matriculados2027} para ${turma.matriculados2027-1} e abrir 1 vaga.`)) return;
+  alterarMat(turmaId, -1);
+  const nova={ id:Date.now().toString(), nome_aluno:nome, turma_id:turmaId, turma_nome:turma.nome, serie:serie, documento_entregue:docEl.value, data_solicitacao:data, created_at:new Date().toISOString() };
+  try{
+    const {data:ins,error}=await supabaseClient.from('ressalvas').insert([{nome_aluno:nome,turma_id:turmaId,turma_nome:turma.nome,serie:serie,documento_entregue:docEl.value,data_solicitacao:data}]).select();
+    if(error) throw error; if(ins&&ins[0]) ressalvas.unshift(ins[0]); else ressalvas.unshift(nova);
+  }catch(e){ ressalvas.unshift(nova); localStorage.setItem('sesi_ressalvas',JSON.stringify(ressalvas)); }
+  renderRessalvas(); popularSelectTurmas();
+  if(nomeEl) nomeEl.value=''; if(turmaSel) turmaSel.value=''; if(serieEl) serieEl.value='';
+  document.querySelectorAll('input[name="res-doc"]').forEach(el=>el.checked=false);
+  if(dataEl) dataEl.valueAsDate=new Date();
+}
+async function excluirRessalva(id){
+  if(!confirm('Excluir essa ressalva? A vaga continua aberta.')) return;
+  ressalvas=ressalvas.filter(r=>r.id!=id); localStorage.setItem('sesi_ressalvas',JSON.stringify(ressalvas));
+  try{ await supabaseClient.from('ressalvas').delete().eq('id',id); }catch(e){}
+  renderRessalvas();
+}
+const _oldRenderForSelect = render;
+const originalRender = _oldRenderForSelect;
+window.render = function(){
+  originalRender();
+  try{ popularSelectTurmas(); }catch(e){}
+};
+document.addEventListener('DOMContentLoaded',()=>{ setTimeout(()=>{ popularSelectTurmas(); loadRessalvas(); const d=document.getElementById('res-data'); if(d) d.valueAsDate=new Date(); },1500); });
+</script>
+
+</body>
+</html>
