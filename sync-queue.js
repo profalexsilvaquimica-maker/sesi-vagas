@@ -68,8 +68,13 @@
           const snapshot = JSON.stringify(item);
           try {
             if (item.tipo === 'delete') {
-              const { error } = await client.from('turmas').delete().eq('id', id);
+              const { data, error } = await client.from('turmas').delete().eq('id', id).select('id');
               if (error) throw error;
+              if (!data || !data.length) {
+                const verify = await client.from('turmas').select('id').eq('id', id);
+                if (verify.error) throw verify.error;
+                if (verify.data && verify.data.length) throw new Error('Exclusão não confirmada pelo Supabase.');
+              }
             } else if (item.tipo === 'upsert') {
               const { data, error } = await client.from('turmas')
                 .upsert(item.dados, { onConflict: 'id' }).select('id');
