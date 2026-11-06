@@ -353,52 +353,145 @@ function popularSelectTurmas(){
   if(cur) sel.value=cur;
 }
 let ressalvas=[];
+const FILA_RESSALVAS_KEY='sesi_ressalvas_pendentes_v1';
+const EXCLUSOES_RESSALVAS_KEY='sesi_ressalvas_exclusoes_v1';
+function lerListaLocal(chave){try{const v=JSON.parse(localStorage.getItem(chave)||'[]');return Array.isArray(v)?v:[];}catch(e){return [];}}
+let filaRessalvas=lerListaLocal(FILA_RESSALVAS_KEY);
+let exclusoesRessalvas=lerListaLocal(EXCLUSOES_RESSALVAS_KEY);
+let enviandoRessalvas=false;
+let carregandoRessalvas=false;
+function persistirRessalvas(){
+ localStorage.setItem(FILA_RESSALVAS_KEY,JSON.stringify(filaRessalvas));
+ localStorage.setItem(EXCLUSOES_RESSALVAS_KEY,JSON.stringify(exclusoesRessalvas));
+ localStorage.setItem('sesi_ressalvas',JSON.stringify(ressalvas));
+}
+function mesmaRessalva(a,b){
+ return String(a.nome_aluno||'').trim()===String(b.nome_aluno||'').trim()
+  && String(a.turma_id)===String(b.turma_id)
+  && String(a.data_solicitacao)===String(b.data_solicitacao)
+  && String(a.documento_entregue)===String(b.documento_entregue);
+}
 async function loadRessalvas(){
-  try{
-    const {data,error}=await supabaseClient.from('ressalvas').select('*').order('created_at',{ascending:false});
-    if(error) throw error; ressalvas=data||[];
-  }catch(e){ const loc=localStorage.getItem('sesi_ressalvas'); ressalvas=loc?JSON.parse(loc):[]; }
+ if(carregandoRessalvas||!navigator.onLine)return;
+ carregandoRessalvas=true;
+ try{
+  const {data,error}=await supabaseClient.from('ressalvas').select('*').order('created_at',{ascending:false});
+  if(error)throw error;
+  const server=(data||[]).filter(r=>!exclusoesRessalvas.some(id=>String(id)===String(r.id)));
+  const pendentes=filaRessalvas.filter(p=>!server.some(r=>mesmaRessalva(p,r)));
+  ressalvas=[...pendentes,...server];
+  persistirRessalvas();
+ }catch(e){
+  const local=lerListaLocal('sesi_ressalvas');
+  ressalvas=[...filaRessalvas,...local.filter(r=>!filaRessalvas.some(p=>String(p.id)===String(r.id)))]
+   .filter(r=>!exclusoesRessalvas.some(id=>String(id)===String(r.id)));
+  setStatus('⚠️ Falha ao atualizar ressalvas','Cópia local preservada; tentaremos novamente.','bg-yellow-100 text-yellow-800',e.message||String(e));
+ }finally{
+  carregandoRessalvas=false;
   renderRessalvas();
+ }
+}
+async function enviarRessalvasPendentes(){
+ if(enviandoRessalvas||!navigator.onLine||(!filaRessalvas.length&&!exclusoesRessalvas.length))return;
+ enviandoRessalvas=true;
+ let falhas=0,erroUltimo='';
+ try{
+  for(const nova of [...filaRessalvas]){
+   try{
+    // Antes de tentar de novo, verifique se uma tentativa anterior já foi gravada.
+    const check=await supabaseClient.from('ressalvas').select('id')
+     .eq('nome_aluno',nova.nome_aluno).eq('turma_id',nova.turma_id)
+     .eq('data_solicitacao',nova.data_solicitacao);
+    if(check.error)throw check.error;
+    if(!check.data||!check.data.length){
+     const {data,error}=await supabaseClient.from('ressalvas').insert([{
+      nome_aluno:nova.nome_aluno,turma_id:nova.turma_id,turma_nome:nova.turma_nome,
+      serie:nova.serie,documento_entregue:nova.documento_entregue,data_solicitacao:nova.data_solicitacao
+     }]).select('id');
+     if(error)throw error;
+     if(!data||!data.length)throw new Error('O Supabase não confirmou a ressalva.');
+    }
+    filaRessalvas=filaRessalvas.filter(p=>p.id!==nova.id);
+    persistirRessalvas();
+   }catch(e){falhas++;erroUltimo=e.message||String(e);}
+  }
+  for(const id of [...exclusoesRessalvas]){
+   try{
+    const {error}=await supabaseClient.from('ressalvas').delete().eq('id',id);
+    if(error)throw error;
+    exclusoesRessalvas=exclusoesRessalvas.filter(x=>String(x)!==String(id));
+    persistirRessalvas();
+   }catch(e){falhas++;erroUltimo=e.message||String(e);}
+  }
+ }finally{enviandoRessalvas=false;}
+ if(falhas){
+  setStatus('❌ Ressalvas aguardando sincronização',
+   (filaRessalvas.length+exclusoesRessalvas.length)+' operação(ões) preservada(s) neste navegador.','bg-red-100 text-red-800',erroUltimo);
+ }else{
+  await loadRessalvas();
+ }
 }
 function renderRessalvas(){
-  const tb=document.getElementById('lista-ressalvas'), ct=document.getElementById('count-ressalvas'), bd=document.getElementById('badge-ressalvas');
-  if(!tb) return;
-  if(ct) ct.textContent=ressalvas.length;
-  if(bd){ if(ressalvas.length>0){ bd.textContent=ressalvas.length; bd.classList.remove('hidden'); } else bd.classList.add('hidden'); }
-  if(ressalvas.length===0){ tb.innerHTML='<tr><td colspan="5" class="py-8 text-center text-slate-400">Nenhuma ressalva ainda</td></tr>'; return; }
-  tb.innerHTML=ressalvas.map(r=>{
-    const isSim=(r.documento_entregue==='SIM'||r.documento_entregue===true);
-    const badge=isSim?'<span class="bg-green-100 text-green-700 px-2.5 py-1 rounded-full text-[11px] font-bold">SIM</span>':'<span class="bg-red-100 text-red-700 px-2.5 py-1 rounded-full text-[11px] font-bold">NÃO</span>';
-    const df=r.data_solicitacao?new Date(r.data_solicitacao+'T00:00:00').toLocaleDateString('pt-BR'):'-';
-    return `<tr class="border-b border-slate-100 hover:bg-slate-50"><td class="px-3 py-3 font-bold">${r.nome_aluno||''}</td><td class="px-3 py-3">${r.turma_nome||r.turma_id||''} <span class="text-slate-400 text-[11px]">(${r.serie||''})</span></td><td class="px-3 py-3 text-center">${badge}</td><td class="px-3 py-3 text-center">${df}</td><td class="px-3 py-3 text-center"><button onclick="excluirRessalva('${r.id}')" class="text-red-400 hover:text-red-600">🗑️</button></td></tr>`;
-  }).join('');
+ const tb=document.getElementById('lista-ressalvas'),ct=document.getElementById('count-ressalvas'),bd=document.getElementById('badge-ressalvas');
+ if(!tb)return;
+ if(ct)ct.textContent=ressalvas.length;
+ if(bd){if(ressalvas.length){bd.textContent=ressalvas.length;bd.classList.remove('hidden');}else bd.classList.add('hidden');}
+ if(!ressalvas.length){tb.innerHTML='<tr><td colspan="5" class="py-8 text-center text-slate-400">Nenhuma ressalva ainda</td></tr>';return;}
+ tb.innerHTML=ressalvas.map(r=>{
+  const sim=(r.documento_entregue==='SIM'||r.documento_entregue===true);
+  const badge=sim?'<span class="bg-green-100 text-green-700 px-2.5 py-1 rounded-full text-[11px] font-bold">SIM</span>':'<span class="bg-red-100 text-red-700 px-2.5 py-1 rounded-full text-[11px] font-bold">NÃO</span>';
+  const df=r.data_solicitacao?new Date(r.data_solicitacao+'T00:00:00').toLocaleDateString('pt-BR'):'-';
+  const pendente=String(r.id).startsWith('local_')?' <small class="text-amber-700">(pendente)</small>':'';
+  const tr=document.createElement('tr');
+  tr.className='border-b border-slate-100 hover:bg-slate-50';
+  const celula=(texto,classe)=>{const td=document.createElement('td');td.className=classe||'px-3 py-3';td.textContent=texto;tr.appendChild(td);return td;};
+  const nome=celula(r.nome_aluno||'','px-3 py-3 font-bold');
+  if(pendente){const aviso=document.createElement('small');aviso.className='text-amber-700';aviso.textContent=' (pendente)';nome.appendChild(aviso);}
+  celula((r.turma_nome||r.turma_id||'')+' ('+(r.serie||'')+')');
+  const tdDoc=celula('','px-3 py-3 text-center');tdDoc.innerHTML=badge;
+  celula(df,'px-3 py-3 text-center');
+  const action=celula('','px-3 py-3 text-center');
+  const btn=document.createElement('button');btn.textContent='🗑️';btn.className='text-red-400 hover:text-red-600';
+  btn.onclick=()=>excluirRessalva(r.id);
+  action.appendChild(btn);
+  return tr.outerHTML;
+ }).join('');
 }
 async function confirmarRessalva(){
-  const nomeEl=document.getElementById('res-nome'), turmaSel=document.getElementById('res-turma'), serieEl=document.getElementById('res-serie'), docEl=document.querySelector('input[name="res-doc"]:checked'), dataEl=document.getElementById('res-data');
-  const nome=nomeEl?nomeEl.value.trim():''; const turmaId=turmaSel?turmaSel.value:''; const serie=serieEl?serieEl.value:''; const data=dataEl?dataEl.value:'';
-  if(!nome){ alert('Digite o nome do aluno'); return; }
-  if(!turmaId){ alert('Selecione a turma'); return; }
-  if(!docEl){ alert('Marque SIM ou NÃO'); return; }
-  if(!data){ alert('Selecione a data'); return; }
-  const turma=turmas.find(t=>t.id===turmaId); if(!turma){ alert('Turma não encontrada'); return; }
-  if(turma.matriculados2027<=0){ alert('Turma já está com 0'); return; }
-  if(!confirm(`Confirmar ressalva de ${nome} na ${turma.nome}? Vai baixar de ${turma.matriculados2027} para ${turma.matriculados2027-1} e abrir 1 vaga.`)) return;
-  alterarMat(turmaId, -1);
-  const nova={ id:Date.now().toString(), nome_aluno:nome, turma_id:turmaId, turma_nome:turma.nome, serie:serie, documento_entregue:docEl.value, data_solicitacao:data, created_at:new Date().toISOString() };
-  try{
-    const {data:ins,error}=await supabaseClient.from('ressalvas').insert([{nome_aluno:nome,turma_id:turmaId,turma_nome:turma.nome,serie:serie,documento_entregue:docEl.value,data_solicitacao:data}]).select();
-    if(error) throw error; if(ins&&ins[0]) ressalvas.unshift(ins[0]); else ressalvas.unshift(nova);
-  }catch(e){ ressalvas.unshift(nova); localStorage.setItem('sesi_ressalvas',JSON.stringify(ressalvas)); }
-  renderRessalvas(); popularSelectTurmas();
-  if(nomeEl) nomeEl.value=''; if(turmaSel) turmaSel.value=''; if(serieEl) serieEl.value='';
-  document.querySelectorAll('input[name="res-doc"]').forEach(el=>el.checked=false);
-  if(dataEl) dataEl.valueAsDate=new Date();
+ const nomeEl=document.getElementById('res-nome'),turmaSel=document.getElementById('res-turma'),serieEl=document.getElementById('res-serie'),docEl=document.querySelector('input[name="res-doc"]:checked'),dataEl=document.getElementById('res-data');
+ const nome=nomeEl?nomeEl.value.trim():'';const turmaId=turmaSel?turmaSel.value:'';const serie=serieEl?serieEl.value:'';const data=dataEl?dataEl.value:'';
+ if(!nome){alert('Digite o nome do aluno');return;}
+ if(!turmaId){alert('Selecione a turma');return;}
+ if(!docEl){alert('Marque SIM ou NÃO');return;}
+ if(!data){alert('Selecione a data');return;}
+ const turma=turmas.find(t=>String(t.id)===String(turmaId));
+ if(!turma){alert('Turma não encontrada');return;}
+ if(turma.matriculados2027<=0){alert('Turma já está com 0');return;}
+ if(!confirm('Confirmar ressalva de '+nome+' na '+turma.nome+'? Vai baixar de '+turma.matriculados2027+' para '+(turma.matriculados2027-1)+' e abrir 1 vaga.'))return;
+ const nova={
+  id:'local_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+  nome_aluno:nome,turma_id:turmaId,turma_nome:turma.nome,
+  serie:serie,documento_entregue:docEl.value,data_solicitacao:data,created_at:new Date().toISOString()
+ };
+ filaRessalvas.push(nova);
+ ressalvas.unshift(nova);
+ persistirRessalvas();
+ alterarMat(turmaId,-1);
+ renderRessalvas();popularSelectTurmas();
+ enviarRessalvasPendentes();
+ if(nomeEl)nomeEl.value='';if(turmaSel)turmaSel.value='';if(serieEl)serieEl.value='';
+ document.querySelectorAll('input[name="res-doc"]').forEach(el=>el.checked=false);
+ if(dataEl)dataEl.valueAsDate=new Date();
 }
 async function excluirRessalva(id){
-  if(!confirm('Excluir essa ressalva? A vaga continua aberta.')) return;
-  ressalvas=ressalvas.filter(r=>r.id!=id); localStorage.setItem('sesi_ressalvas',JSON.stringify(ressalvas));
-  try{ await supabaseClient.from('ressalvas').delete().eq('id',id); }catch(e){}
-  renderRessalvas();
+ if(!confirm('Excluir essa ressalva? A vaga continua aberta.'))return;
+ const eraPendente=filaRessalvas.some(r=>String(r.id)===String(id));
+ if(eraPendente)filaRessalvas=filaRessalvas.filter(r=>String(r.id)!==String(id));
+ else if(!exclusoesRessalvas.some(x=>String(x)===String(id)))exclusoesRessalvas.push(id);
+ ressalvas=ressalvas.filter(r=>String(r.id)!==String(id));
+ persistirRessalvas();
+ renderRessalvas();
+ if(!eraPendente)enviarRessalvasPendentes();
 }
 const _oldRenderForSelect = render;
 const originalRender = _oldRenderForSelect;
@@ -406,7 +499,11 @@ window.render = function(){
   originalRender();
   try{ popularSelectTurmas(); }catch(e){}
 };
-document.addEventListener('DOMContentLoaded',()=>{ setTimeout(()=>{ popularSelectTurmas(); loadRessalvas(); const d=document.getElementById('res-data'); if(d) d.valueAsDate=new Date(); },1500); });
+document.addEventListener('DOMContentLoaded',()=>{
+ setTimeout(()=>{popularSelectTurmas();loadRessalvas();enviarRessalvasPendentes();const d=document.getElementById('res-data');if(d)d.valueAsDate=new Date();},1000);
+ setInterval(()=>{if(!document.hidden){loadRessalvas();enviarRessalvasPendentes();}},10000);
+ window.addEventListener('online',()=>{loadRessalvas();enviarRessalvasPendentes();});
+});
 </script>
 
 </body>
