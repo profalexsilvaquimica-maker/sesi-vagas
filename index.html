@@ -401,7 +401,8 @@ async function enviarRessalvasPendentes(){
     // Antes de tentar de novo, verifique se uma tentativa anterior já foi gravada.
     const check=await supabaseClient.from('ressalvas').select('id')
      .eq('nome_aluno',nova.nome_aluno).eq('turma_id',nova.turma_id)
-     .eq('data_solicitacao',nova.data_solicitacao);
+     .eq('data_solicitacao',nova.data_solicitacao)
+     .eq('documento_entregue',nova.documento_entregue);
     if(check.error)throw check.error;
     if(!check.data||!check.data.length){
      const {data,error}=await supabaseClient.from('ressalvas').insert([{
@@ -452,10 +453,13 @@ function renderRessalvas(){
   celula(df,'px-3 py-3 text-center');
   const action=celula('','px-3 py-3 text-center');
   const btn=document.createElement('button');btn.textContent='🗑️';btn.className='text-red-400 hover:text-red-600';
-  btn.onclick=()=>excluirRessalva(r.id);
+  btn.dataset.ressalvaId=String(r.id);
   action.appendChild(btn);
   return tr.outerHTML;
  }).join('');
+ tb.querySelectorAll('button[data-ressalva-id]').forEach(btn=>{
+  btn.onclick=()=>excluirRessalva(btn.dataset.ressalvaId);
+ });
 }
 async function confirmarRessalva(){
  const nomeEl=document.getElementById('res-nome'),turmaSel=document.getElementById('res-turma'),serieEl=document.getElementById('res-serie'),docEl=document.querySelector('input[name="res-doc"]:checked'),dataEl=document.getElementById('res-data');
