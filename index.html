@@ -118,73 +118,59 @@ function setStatus(msg, detail, color, errDetail){
 }
 
 async function init(){
- // Carrega local primeiro (bonito)
- const local = localStorage.getItem('sesi_turmas_v3');
- if(local){ try{ turmas=JSON.parse(local); }catch(e){} }
- if(turmas.length===0){
-   // seed mínimo se não tiver nada
-   turmas=[{id:'t1',nome:'1EFT01ANA - 27.M (1A)',turno:'Matutino',segmento:'Fundamental I',serie:'1º ano',alunos2026:0,vagas2027:25,matriculados2027:0}];
- }
- setStatus(`📦 ${turmas.length} turmas local (${turmas.reduce((s,t)=>s+t.vagas2027,0)} vagas)`,`Local: ${turmas.length} turmas. Clique em 🚀 pra enviar pra nuvem. Se der erro, o motivo vai aparecer abaixo.`, 'bg-yellow-100 text-yellow-800');
+ const local=localStorage.getItem('sesi_turmas_v3');
+ if(local){try{turmas=JSON.parse(local);if(!Array.isArray(turmas))turmas=[];}catch(e){turmas=[];}}
+ document.getElementById('inputMetaValor').value=metaValor;
+ document.getElementById('selectMetaTipo').value=metaTipo;
  render();
-
- // Tenta nuvem em background
+ if(pendingSaves.size) setStatus('⏳ Alterações locais pendentes',pendingSaves.size+' turma(s) aguardando a nuvem.','bg-yellow-100 text-yellow-800');
+ else setStatus('☁️ Conectando à nuvem...','Conferindo as turmas com o Supabase.','bg-yellow-100 text-yellow-800');
+ await loadCloud(true);
  try{
-   const {data, error} = await supabaseClient.from('turmas').select('*');
-   if(error) throw error;
-   if(data && data.length>0){
-     turmas=data.map(r=>({id:r.id, nome:r.nome, turno:r.turno, segmento:r.segmento, serie:r.serie||'', alunos2026:r.vagas_2026||0, vagas2027:r.vagas_2027||0, matriculados2027:r.matriculados||0}));
-     setStatus(`☁️ Salvo na nuvem - ao vivo (${turmas.length} turmas)`,`Nuvem OK! ${turmas.length} turmas. Total ${turmas.reduce((s,t)=>s+t.vagas2027,0)} vagas.`, 'bg-green-100 text-green-800');
-     render();
-   }
- }catch(err){
-   setStatus(`❌ Erro nuvem: ${err.message}`,`Erro ao ler nuvem: ${err.message}. Suas ${turmas.length} turmas estão salvas local. Clique em 🚀 - se falhar, copie o erro abaixo e me mande print.`, 'bg-red-100 text-red-800', `ERRO COMPLETO:\n${err.message}\n\nDetalhe:\n${JSON.stringify(err,null,2)}\n\nVerifique a conexão e as políticas RLS do Supabase. Não desative a proteção de acesso.`);
- }
-   // Liga realtime
-  try{
-    supabaseClient.channel('turmas_realtime').on('postgres_changes',{event:'*',schema:'public',table:'turmas'},(payload)=>{
-      console.log('Mudança na nuvem detectada!', payload);
-      loadCloud();
-    }).subscribe((status)=>{
-      console.log('Realtime status:', status);
-      if(status==='SUBSCRIBED'){ setStatus(`☁️ Ao vivo (${turmas.length} turmas) - Sincronizando`, `Conectado ao vivo! Se alguém mudar em outro PC, atualiza aqui em 1-2 segundos!`, 'bg-green-100 text-green-800'); }
-    });
-  }catch(e){ console.log('realtime error', e); }
-  // Fallback: atualiza a cada 3 segundos se realtime falhar
-  setInterval(()=>{ loadCloud(); }, 3000);
+  supabaseClient.channel('turmas_realtime')
+   .on('postgres_changes',{event:'*',schema:'public',table:'turmas'},()=>loadCloud())
+   .subscribe(status=>{
+    if(status==='SUBSCRIBED' && !pendingSaves.size){
+     setStatus('☁️ Ao vivo ('+turmas.length+' turmas)','Alterações de outros dispositivos serão atualizadas automaticamente.','bg-green-100 text-green-800');
+    }
+   });
+ }catch(e){console.warn('Realtime indisponível:',e);}
+ setInterval(()=>loadCloud(),4000);
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)loadCloud();});
 }
-
-async function loadCloud(){
+async function loadCloud(inicial){
+ if(carregandoNuvem||!navigator.onLine)return;
+ carregandoNuvem=true;
  try{
-  const {data}=await supabaseClient.from('turmas').select('*');
-  if(data && data.length>0){ 
-    // Não sobrescreve turmas que foram editadas nos últimos 2 segundos (evita travada)
-    const agora = Date.now();
-    const cloudMap = new Map(data.map(r=>[r.id, r]));
-    // Atualiza só turmas que NÃO estão com save pendente e não foram editadas recentemente
-    const novasTurmas = turmas.map(localT => {
-      if(pendingSaves.has(localT.id)) return localT; // está salvando agora, não sobrescreve
-      if(lastLocalUpdate[localT.id] && (agora - lastLocalUpdate[localT.id] < 2000)) return localT; // editado há menos de 2s
-      const cloudR = cloudMap.get(localT.id);
-      if(cloudR){
-        return {id:cloudR.id,nome:cloudR.nome,turno:cloudR.turno,segmento:cloudR.segmento,serie:cloudR.serie||'',alunos2026:cloudR.vagas_2026||0,vagas2027:cloudR.vagas_2027||0,matriculados2027:cloudR.matriculados||0};
-      }
-      return localT;
-    });
-    // Adiciona turmas novas que só existem na nuvem
-    for(const r of data){
-      if(!turmas.find(t=>t.id===r.id) && !pendingSaves.has(r.id)){
-        novasTurmas.push({id:r.id,nome:r.nome,turno:r.turno,segmento:r.segmento,serie:r.serie||'',alunos2026:r.vagas_2026||0,vagas2027:r.vagas_2027||0,matriculados2027:r.matriculados||0});
-      }
-    }
-    // Só renderiza se algo mudou de verdade
-    const mudou = JSON.stringify(novasTurmas.map(t=>t.id+':'+t.matriculados2027).sort()) !== JSON.stringify(turmas.map(t=>t.id+':'+t.matriculados2027).sort());
-    if(mudou || novasTurmas.length !== turmas.length){
-      turmas = novasTurmas;
-      render(); 
-    }
+  const {data,error}=await supabaseClient.from('turmas').select('*');
+  if(error)throw error;
+  if(!Array.isArray(data))throw new Error('Resposta inválida do Supabase.');
+  if(!data.length&&turmas.length&&!pendingSaves.size&&!nuvemConhecida){
+   setStatus('⚠️ Nuvem vazia — cópia local preservada','Confira a nuvem antes de enviar manualmente. Nenhuma turma local foi apagada.','bg-yellow-100 text-yellow-800');
+   return;
   }
- }catch(e){ console.log('loadCloud error', e); }
+  if(data.length)nuvemConhecida=true;
+  const localMap=new Map(turmas.map(t=>[String(t.id),t]));
+  const remotas=data.filter(r=>!(sync.pendente(r.id)&&!localMap.has(String(r.id)))).map(r=>{
+   if(sync.pendente(r.id))return localMap.get(String(r.id))||null;
+   return {id:r.id,nome:r.nome,turno:r.turno,segmento:r.segmento,serie:r.serie||'',alunos2026:r.vagas_2026||0,vagas2027:r.vagas_2027||0,matriculados2027:r.matriculados||0};
+  }).filter(Boolean);
+  for(const t of turmas){
+   if(sync.pendente(t.id)&&!remotas.some(x=>String(x.id)===String(t.id)))remotas.push(t);
+  }
+  const agora=Date.now();
+  const novas=remotas.map(t=>{
+   const local=localMap.get(String(t.id));
+   return local&&lastLocalUpdate[t.id]&&agora-lastLocalUpdate[t.id]<1800?local:t;
+  });
+  if(JSON.stringify(novas)!==JSON.stringify(turmas)){turmas=novas;render();}
+  if(inicial&&!pendingSaves.size){
+   setStatus('☁️ Sincronizado ('+turmas.length+' turmas)','Dados carregados e sincronização automática ativa.','bg-green-100 text-green-800');
+  }
+  if(pendingSaves.size)sync.processar();
+ }catch(e){
+  setStatus('❌ Falha ao ler a nuvem','Dados locais preservados. A conexão será tentada novamente.','bg-red-100 text-red-800',e.message||String(e));
+ }finally{carregandoNuvem=false;}
 }
 
 function getFiltered(){
