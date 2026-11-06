@@ -418,8 +418,13 @@ async function enviarRessalvasPendentes(){
   }
   for(const id of [...exclusoesRessalvas]){
    try{
-    const {error}=await supabaseClient.from('ressalvas').delete().eq('id',id);
+    const {data,error}=await supabaseClient.from('ressalvas').delete().eq('id',id).select('id');
     if(error)throw error;
+    if(!data||!data.length){
+     const verify=await supabaseClient.from('ressalvas').select('id').eq('id',id);
+     if(verify.error)throw verify.error;
+     if(verify.data&&verify.data.length)throw new Error('Exclusão da ressalva não confirmada.');
+    }
     exclusoesRessalvas=exclusoesRessalvas.filter(x=>String(x)!==String(id));
     persistirRessalvas();
    }catch(e){falhas++;erroUltimo=e.message||String(e);}
