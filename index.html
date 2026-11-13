@@ -297,8 +297,8 @@ document.getElementById('btnForcePush').onclick=async()=>{
  else { setStatus(`⚠️ ${ok} sucesso, ${erro} erros`,`${ok} ok, ${erro} erros. Copie o erro abaixo e me mande print!`,'bg-red-100 text-red-800', lastErr); }
 };
 
-document.getElementById('inputMetaValor').onchange=async(e)=>{ metaValor=parseInt(e.target.value)||0; render(); };
-document.getElementById('selectMetaTipo').onchange=async(e)=>{ metaTipo=e.target.value; render(); };
+document.getElementById('inputMetaValor').onchange=async(e)=>{const next=parseInt(e.target.value)||0; const {error}=await supabaseClient.from('matriculas_config').update({meta_valor:next,updated_at:new Date().toISOString()}).eq('id',1);if(error){setStatus('Meta não salva',error.message,'bg-red-100 text-red-800',error.message);e.target.value=metaValor;return}metaValor=next;render();};
+document.getElementById('selectMetaTipo').onchange=async(e)=>{const next=e.target.value;const {error}=await supabaseClient.from('matriculas_config').update({meta_tipo:next,updated_at:new Date().toISOString()}).eq('id',1);if(error){setStatus('Meta não salva',error.message,'bg-red-100 text-red-800',error.message);e.target.value=metaTipo;return}metaTipo=next;render();};
 document.getElementById('btnCopyLink').onclick=()=>{ navigator.clipboard.writeText(window.location.href); alert('Link copiado! Manda no grupo!'); };
 document.getElementById('btnExport').onclick=()=>{ const dataStr=JSON.stringify({turmas,meta:{valor:metaValor,tipo:metaTipo}},null,2); const blob=new Blob([dataStr],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`sesi_backup_${new Date().toISOString().slice(0,10)}.json`; a.click(); };
 document.getElementById('btnImport').onclick=()=>document.getElementById('fileImport').click();
@@ -392,7 +392,7 @@ if(accessError||!access?.ativo){loggedInUser=null;err.textContent='Conta sem aut
 loggedInUser=authData.user;
 if(!appInitialized){
 try{
-await init(); appInitialized=true; await loadRessalvas();
+await init(); appInitialized=true; popularSelectTurmas(); await loadRessalvas();
 const {data:config,error:configError}=await supabaseClient.from('matriculas_config').select('meta_valor,meta_tipo').eq('id',1).maybeSingle();
 if(!configError&&config){metaValor=config.meta_valor;metaTipo=config.meta_tipo;document.getElementById('inputMetaValor').value=metaValor;document.getElementById('selectMetaTipo').value=metaTipo;render();}
 const d=document.getElementById('res-data');if(d)d.valueAsDate=new Date();
